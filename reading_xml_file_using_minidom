@@ -1,0 +1,85 @@
+rom odoo import api, models, fields, _
+from odoo.exceptions import ValidationError
+from suds.client import Client
+from http import HTTPStatus
+from xml.dom import minidom
+
+
+class ProductTemplate(models.Model):    
+    _inherit = 'product.template'
+
+    type = fields.Selection(selection_add=[('product', 'Storable Product')], tracking=True, default="product")
+    product_type = fields.Selection([('raw_material', 'Raw material'), ('finish_good', 'finished goods'), ('packing', 'Packaging'), ('manufacturing', 'Manufacturing')], string="Type")
+    
+    threepl_item_number = fields.Char('Item Number')
+    threepl_unit_of_measure = fields.Char('UOM')
+    threepl_qty_on_hand = fields.Float('Qty on Hand',compute='get_product_stock_detail')
+    threepl_qty_available = fields.Float('Qty Available',compute='get_product_stock_detail')
+    threepl_qty_available_to_order = fields.Float('Qty Available To Order',compute='get_product_stock_detail')
+    threepl_item_desc_1 = fields.Char('Item Desc 1',compute='get_product_stock_detail')
+    threepl_item_desc_2 = fields.Char('Item Desc 2',compute='get_product_stock_detail')
+    sup_part_number_1 = fields.Char('Sub Part Number1',compute='get_product_stock_detail')
+    sup_part_number_2 = fields.Char('Sub Part Number2',compute='get_product_stock_detail')
+
+    
+    _sql_constraints = [('name_uniq', 'unique (company_id, name, default_code)', 'Name must be unique within an Company!')]
+
+    def get_product_stock_detail(self):
+        three_pl_url = self.env.user.company_id.three_pl_url or ''
+        if three_pl_url:
+            url = three_pl_url
+        # url = "https://outlo.camelot3plcloud.com:17047/WebService/WS/Test%20Outsource/Codeunit/TPLWebServiceInt"
+            root = False
+            try:
+                c1 = Client(url,username='IncipientCorp',password='8+Ry{wrWdW', faults=False)
+                c1.service.TestConnection()
+                res = c1.service.GetAvailableInventory('API_IN_EXP',"","","",'CORBET SCIENTIFIC','')
+                print (res)
+                if res[0]==HTTPStatus.OK.value:
+                    root = minidom.parseString(res[1]) 
+                    print(root.firstChild.tagName)
+                # nsmap = {'n': 'urn:microsoft-dynamics-nav/xmlports/x37005331'}
+            except Exception as e:
+                pass
+
+            for record in self:
+                qty_on_hand = qty_available = qty_available_to_order = 0.0
+                item_desc_1 = item_desc_2 = sup_part_number_1 = sup_part_number_2 = threepl_unit_of_measure = ''
+                if root:
+                    for x in root.getElementsByTagName('Inventory'):
+                        itemnumber = x.getElementsByTagName('ItemNumber')[0]
+                        item_number = itemnumber.childNodes[0].data
+                            
+                        if record.default_code == item_number:
+                            try:
+                               Qty_On_Hand = x.getElementsByTagName('QtyOnHand')[0]
+                               QtyOnHand = Qty_On_Hand.childNodes[0].data
+                               
+                               Qty_Available = x.getElementsByTagName('QtyAvailable')[0]
+                               QtyAvailable = Qty_Available.childNodes[0].data
+                        
+                               Qty_Available_To_Order = x.getElementsByTagName('QtyAvailableToOrder')[0]
+                               QtyAvailableToOrder = Qty_Available_To_Order.childNodes[0].data
+                                
+                            except:
+                               pass   
+                            ItemDesc1 = x.getElementsByTagName('ItemDesc1')[0]
+                            item_desc_1 = ItemDesc1.childNodes[0].data
+
+                            item_desc_2 = ' ' 
+                            sup_part_number_1 = ''
+                            sup_part_number_2 = ''
+
+                            UOM = x.getElementsByTagName('UOM')[0]
+                            threepl_unit_of_measure = UOM.childNodes[0].data
+                            break
+                            
+                record.threepl_qty_on_hand = qty_on_hand
+                record.threepl_qty_available = qty_available
+                record.threepl_qty_available_to_order = qty_available_to_order
+                record.threepl_item_desc_1 = item_desc_1
+                record.threepl_item_desc_2 = item_desc_2
+                record.sup_part_number_1 = sup_part_number_1
+                record.sup_part_number_2 = sup_part_number_2
+                record.threepl_unit_of_measure = threepl_unit_of_measure
+
