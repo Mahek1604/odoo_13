@@ -1,0 +1,79 @@
+from odoo import api, models, fields, _
+from odoo.exceptions import ValidationError
+import xml.etree.ElementTree as ET
+from suds.client import Client
+from http import HTTPStatus
+
+
+class ProductTemplate(models.Model):    
+    _inherit = 'product.template'
+
+    type = fields.Selection(selection_add=[('product', 'Storable Product')], tracking=True, default="product")
+    product_type = fields.Selection([('raw_material', 'Raw material'), ('finish_good', 'finished goods'), ('packing', 'Packaging'), ('manufacturing', 'Manufacturing')], string="Type")
+    
+    threepl_item_number = fields.Char('Item Number')
+    threepl_unit_of_measure = fields.Char('UOM')
+    threepl_qty_on_hand = fields.Float('Qty on Hand',compute='get_product_stock_detail')
+    threepl_qty_available = fields.Float('Qty Available',compute='get_product_stock_detail')
+    threepl_qty_available_to_order = fields.Float('Qty Available To Order',compute='get_product_stock_detail')
+    threepl_item_desc_1 = fields.Char('Item Desc 1',compute='get_product_stock_detail')
+    threepl_item_desc_2 = fields.Char('Item Desc 2',compute='get_product_stock_detail')
+    sup_part_number_1 = fields.Char('Sub Part Number1',compute='get_product_stock_detail')
+    sup_part_number_2 = fields.Char('Sub Part Number2',compute='get_product_stock_detail')
+
+    
+    _sql_constraints = [('name_uniq', 'unique (company_id, name, default_code)', 'Name must be unique within an Company!')]
+
+    def get_product_stock_detail(self):
+        three_pl_url = self.env.user.company_id.three_pl_url or ''
+        if three_pl_url:
+            url = three_pl_url
+            root = False
+            try:
+                c1 = Client(url,username='Your_username',password='your_password', faults=False)
+                c1.service.TestConnection()
+                res = c1.service.GetAvailableInventory('API_IN_EXP',"","","",'CORBET SCIENTIFIC','')
+                print (res)
+                if res[0]==HTTPStatus.OK.value:
+                    root = ET.fromstring(res[1]) 
+                nsmap = {'n': 'urn:microsoft-dynamics-nav/xmlports/x37005331'}
+            except Exception as e:
+                pass
+
+            for record in self:
+                qty_on_hand = qty_available = qty_available_to_order = 0.0
+                item_desc_1 = item_desc_2 = sup_part_number_1 = sup_part_number_2 = threepl_unit_of_measure = ''
+                if root:
+                    for x in root.findall('n:Inventory',namespaces=nsmap):
+                        item_number = x.find('n:ItemNumber',namespaces=nsmap).text
+                        if record.default_code == item_number:
+                            try:
+                                qty_on_hand = x.find('n:QtyOnHand',namespaces=nsmap).text
+                                qty_on_hand = qty_on_hand.replace(",",'')
+                                qty_on_hand = float(qty_on_hand)
+                                
+                                qty_available = x.find('n:QtyAvailable',namespaces=nsmap).text or 0.0
+                                qty_available = qty_available.replace(',','')
+                                qty_available = float(qty_available)
+                                
+                                qty_available_to_order = x.find('n:QtyAvailableToOrder',namespaces=nsmap).text or 0.0
+                                qty_available_to_order = qty_available_to_order.replace(',','')
+                                qty_available_to_order = float(qty_available_to_order)
+                                
+                            except:
+                                pass   
+                            item_desc_1 = x.find('n:ItemDesc1',namespaces=nsmap).text or ''
+                            item_desc_2 = x.find('n:ItemDesc2',namespaces=nsmap).text or ''
+                            sup_part_number_1 = x.find('n:SubPart1Number',namespaces=nsmap).text or ''
+                            sup_part_number_2 = x.find('n:SubPart2Number',namespaces=nsmap).text or ''
+                            threepl_unit_of_measure = x.find('n:UOM',namespaces=nsmap).text or ''
+                            break
+                            
+                record.threepl_qty_on_hand = qty_on_hand
+                record.threepl_qty_available = qty_available
+                record.threepl_qty_available_to_order = qty_available_to_order
+                record.threepl_item_desc_1 = item_desc_1
+                record.threepl_item_desc_2 = item_desc_2
+                record.sup_part_number_1 = sup_part_number_1
+                record.sup_part_number_2 = sup_part_number_2
+                record.threepl_unit_of_measure = threepl_unit_of_measure
