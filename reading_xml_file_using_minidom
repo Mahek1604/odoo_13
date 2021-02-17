@@ -28,10 +28,9 @@ class ProductTemplate(models.Model):
         three_pl_url = self.env.user.company_id.three_pl_url or ''
         if three_pl_url:
             url = three_pl_url
-        # url = "https://outlo.camelot3plcloud.com:17047/WebService/WS/Test%20Outsource/Codeunit/TPLWebServiceInt"
             root = False
             try:
-                c1 = Client(url,username='IncipientCorp',password='8+Ry{wrWdW', faults=False)
+                c1 = Client(url,username='your_username',password='your_password', faults=False)
                 c1.service.TestConnection()
                 res = c1.service.GetAvailableInventory('API_IN_EXP',"","","",'CORBET SCIENTIFIC','')
                 print (res)
