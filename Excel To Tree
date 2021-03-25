@@ -1,0 +1,41 @@
+ decoded_data = base64.decodestring(self.excel_sheet_name)
+      book = xlrd.open_workbook(file_contents=decoded_data)
+      sheet = book.sheet_by_index(0)
+      main_list = []
+      xls_file_header  = ['Name','Payee','Mode of Payment','Transaction Date','Amount Total']
+      for rowx, row in enumerate(map(sheet.row, range(sheet.nrows)),1):
+          if rowx == 1:
+            data_item = []
+            for text in row:
+              data_item.append(text.value)
+            if xls_file_header != data_item:
+              raise UserError(_('There is a error in xls format'))            
+            continue
+          values = []
+          for colx, cell in enumerate(row):
+            if cell.ctype is xlrd.XL_CELL_DATE:
+              is_datetime = cell.value % 1 != 0.0
+              dt = datetime.datetime(*xlrd.xldate.xldate_as_tuple(cell.value, book.datemode))
+              values.append(
+                dt.strftime('%Y-%m-%d')
+              )
+            else:
+              values.append(cell.value)
+          for list in main_list:
+            a = set(list)  
+            b = set(values) 
+            if a == b:
+              raise UserError(_('Some duplicate row found from the file!!')) 
+          main_list.append(values)
+          continue
+      demo_excel_to_tree_obj = self.env['demo.excel.to.tree'].search([])
+      for sublist in main_list:
+        res_users_id = self.env['res.users'].search([('name','=',sublist[0])])
+        res_partners_id = self.env['res.partner'].search([('name','=',sublist[1])])
+        upload_sheet_id = self.env['demo.excel.to.tree'].create({'demo_excel_to_tree_id':self.id,
+                                                               'name':res_users_id.id,
+                                                               'payee':res_partners_id.id,
+                                                               'mode_of_payment':sublist[2],
+                                                               'transaction_date':sublist[3],
+                                                               'amount':sublist[4]})                                                       
+   
