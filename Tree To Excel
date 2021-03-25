@@ -1,0 +1,33 @@
+demo_excel_to_tree_ids = self.env['demo.excel.to.tree'].search([])
+      main_list = {}
+      for data in demo_excel_to_tree_ids:
+        res_users_id = self.env['res.users'].search([('id','=',data.name.id)])
+        if not res_users_id.id in main_list.keys():
+          main_list[res_users_id.id] = 0
+        sub_list = [data.mode_of_payment,data.transaction_date,data.amount] 
+        main_list[res_users_id.id] = sub_list  
+
+      filename = self.name
+      workbook = xlsxwriter.Workbook(filename)
+      worksheet = workbook.add_worksheet('Demo Sheet')
+
+      format1 = workbook.add_format({'bold': True})
+      format2 = workbook.add_format({'font_size':14,'bold': True})   
+      worksheet.write(0,0,'Name',format2)
+      worksheet.write(0,1,'Mode Of Payment',format2)  
+      worksheet.write(0,2,'Transaction Mode',format2)
+      worksheet.write(0,3,'Amount',format2)
+      count_num = 1
+      for dict_key,dict_value in main_list.items():
+        worksheet.write(count_num,0,dict_key,format1) 
+        worksheet.write(count_num,1,dict_value[0],format1)  
+        worksheet.write(count_num,2,dict_value[1],format1)  
+        worksheet.write(count_num,3,dict_value[2],format1)   
+        count_num= count_num + 1  
+      
+      workbook.close()
+      data =''
+      with open(filename, 'rb') as fp:
+        data = base64.b64encode(fp.read())
+        self.feed_file = data
+        self.file_name_xlsx=filename
